@@ -1,0 +1,14 @@
+# Bank SMS NER Model - Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core ML Library for NER
+spacy>=3.0.0,<4.0.0
+
+# FastAPI for REST API
+fastapi>=0.100.0
+
+# ASGI server for FastAPI
+uvicorn[standard]>=0.23.0
+
+# Pydantic for data validation (included with FastAPI, but explicit)
+pydantic>=2.0.0

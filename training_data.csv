@@ -1,0 +1,43 @@
+text,amount_start,amount_end,txn_type_start,txn_type_end,account_start,account_end,date_start,date_end,balance_start,balance_end
+HDFC Bank: Rs.45000 credited to a/c ending 4521 on 01-Dec-2024.,11,19,20,28,32,48,52,63,,
+SBI Alert: INR 3500 debited from Acct XX6789 on 03-Dec-2024.,11,19,20,27,33,44,48,59,,
+ICICI: Rs.12000 credited to account ending 8834 on 02-Dec-2024.,7,15,16,24,28,48,52,63,,
+Your UPI txn of INR 150 deposited to a/c XX2345 today.,16,23,24,33,37,47,48,53,,
+Axis Bank: Rs.234 credited to a/c 7890 on 30-Nov-2024.,11,17,18,26,35,43,47,58,,
+HDFC Bank: Rs.25000 credited to Acct ending 1122 on 05-Dec-2024.,11,19,20,28,32,49,53,64,,
+IMPS received: INR 8750 credited to account XX4455 on 10-Dec-2024.,16,24,34,42,46,60,64,75,,
+Paytm: Rs.500 received in a/c ending 9988 on 14-Dec-24.,10,16,17,25,29,44,48,57,,
+Transfer success: INR 1200 credited to Acct XX7766 on 08-Dec-24.,27,35,36,44,48,59,63,72,,
+Google Pay: Rs.3500 credited to a/c 5544 on 13-Dec-2024.,24,31,32,40,49,57,61,72,,
+HDFC Bank: Rs.10000 debited from a/c ending 4521 on 02-Dec-2024.,11,19,20,27,33,49,53,64,,
+SBI Alert: INR 750 debited from Acct XX6789 on 16-Nov-24.,11,18,19,26,32,43,47,56,,
+ICICI: Rs.2499 spent from account ending 8834 on 11-Dec-2024.,12,19,20,25,47,66,70,81,,
+Axis Bank: INR 4599 debited from a/c XX2345 on 09-Dec-24.,11,19,20,27,33,43,47,56,,
+POS: Rs.15000 transferred from a/c 7890 on 28-Nov-2024.,7,15,16,27,41,49,53,64,,
+ATM: Rs.899 debited from Acct ending 1122 on 04-Dec-2024.,5,11,12,19,25,41,45,56,,
+HDFC Bank: Rs.12500 debited from a/c ending 4521 on 05-Dec-2024.,18,26,27,34,45,61,65,76,,
+SBI: INR 1850 withdrawn from Acct XX6789 today.,5,13,14,23,29,40,41,46,,
+ICICI: Rs.650 spent on account XX8834 on 14-Dec-2024.,7,13,14,19,37,49,53,64,,
+Amazon purchase: INR 8999 debited from a/c XX2345 on 10-Dec-24.,22,30,31,38,44,54,58,67,,
+Rs.5000 debited from account 1234567890 on 12-May-25.,0,7,8,15,26,44,48,57,,
+PhonePe: Rs.3250 spent via card ending 9876 on 13-Dec-2024.,9,16,17,22,31,47,51,62,,
+NEFT Txn: INR 599 debited from a/c no 4455 on 11-Dec-2024.,10,17,18,25,31,42,46,57,,
+Union Bank: Amount Rs.7500 credited to account no 3344 on 07-Dec-24.,19,26,27,35,44,59,63,72,,
+Canara Bank: Rs.50000 credited to A/C XX1100 on 01-Dec-2024.,13,21,22,30,34,44,48,59,,
+INR 4683 spent on Kotak Credit Card x2963 on 25-DEC-2025 at AIR INDIA LTD. Avl limit INR 180683.,0,8,9,14,18,41,45,56,85,95
+A/c *0911 Debited for Rs:170.00 on 22-12-2025 19:08:34 by Mob Bk. Avl Bal Rs:20244.08.,0,9,10,17,22,31,35,45,73,84
+INR 285.09 debited from A/c no. XX405945 on 10-12-2025. Avl bal: INR 2614.31.,0,10,11,18,24,40,44,54,66,77
+Your a/c XXXXX31 debited for payee COLABA SWEET MART for Rs. 855.00 on 2025-12-13.,5,16,17,24,57,67,71,81,,
+Rs.5000 debited from a/c ending 4521 on 15-Dec-2024. Avl Bal: Rs.45000.,0,7,8,15,21,37,41,52,63,71
+INR 2500 credited to Acct XX6789 on 20-Dec-24. Available balance: INR 35000.,0,8,9,17,21,32,36,45,66,75
+INR 1999 spent on Kotak Credit Card x5566 on 18-Dec-24 at Amazon. Avl limit INR 95000.,0,8,9,14,18,41,45,54,76,85
+Rs.899 debited from account XX8834 on 12-Dec-2024 at Swiggy. Avl Bal Rs.12500.,0,6,7,14,20,34,38,49,69,77
+INR 999 spent on Kotak Credit Card x8877 on 01-JAN-2025 at Netflix.,0,7,8,13,17,40,44,55,,
+INR 1500 spent on Kotak Credit Card x1234 on 20-Dec-24 at Amazon.,0,8,9,14,18,41,45,54,,
+Rs.2999 spent on HDFC Credit Card XX5678 on 15-Dec-2024 at Flipkart.,0,7,8,13,17,40,44,55,,
+INR 5500 debited from ICICI Credit Card x9876 on 10-Dec-24.,0,8,9,16,22,45,49,58,,
+Rs.899 spent using SBI Credit Card ending 4455 on 12-Dec-2024.,0,6,7,12,19,46,50,61,,
+INR 3200 charged on Axis Credit Card x7890 on 18-Dec-24 at Swiggy.,0,8,9,16,20,42,46,55,,
+Rs.1299 spent on Card x5566 on 22-Dec-2024 at Zomato.,0,7,8,13,17,27,31,42,,
+INR 2000 withdrawn using Kotak Debit Card x3344 on 14-Dec-24.,0,8,9,18,25,47,51,60,,
+Rs.4500 spent on Credit Card XX2211 on 05-Dec-2024 at BigBasket.,0,7,8,13,17,35,39,50,,
