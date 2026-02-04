@@ -128,6 +128,68 @@ def init_database():
             )
         """)
         
+        # ============ Phase 5: Trust Scoring Tables ============
+        
+        # Add trust_score column to transactions
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN trust_score REAL DEFAULT 0")
+        except:
+            pass  # Column already exists
+        
+        # Add verification_count for consensus tracking
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN verification_count INTEGER DEFAULT 0")
+        except:
+            pass  # Column already exists
+        
+        # Create anomaly_flags table for suspicious transactions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS anomaly_flags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id INTEGER REFERENCES transactions(id),
+                flag_type TEXT NOT NULL,
+                severity TEXT DEFAULT 'low',
+                message TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # ============ Phase 6: Pattern Analysis Tables ============
+        
+        # Location patterns - track where user typically transacts
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS location_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                cluster_radius REAL DEFAULT 500,
+                visit_count INTEGER DEFAULT 1,
+                last_visited TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Time patterns - track when user typically transacts
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS time_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hour_of_day INTEGER NOT NULL,
+                day_of_week INTEGER NOT NULL,
+                txn_count INTEGER DEFAULT 1
+            )
+        """)
+        
+        # Merchant patterns - track frequent merchants
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS merchant_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchant_name TEXT NOT NULL UNIQUE,
+                category TEXT,
+                visit_count INTEGER DEFAULT 1,
+                total_spent REAL DEFAULT 0,
+                last_visited TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         conn.commit()
         print("[OK] Database initialized successfully")
 
@@ -584,6 +646,313 @@ def update_transaction_verification(txn_id: int, verified: bool, verified_by: Op
         """, (verified, verified_by, txn_id))
         conn.commit()
         return cursor.rowcount > 0
+
+
+# ============ Phase 5: Trust Scoring Functions ============
+
+def add_anomaly_flag(transaction_id: int, flag_type: str, severity: str = "low", message: str = None) -> int:
+    """
+    Add an anomaly flag to a transaction.
+    
+    Args:
+        transaction_id: ID of the transaction
+        flag_type: Type of anomaly ('amount', 'location', 'time', 'frequency')
+        severity: 'low', 'medium', 'high'
+        message: Description of the anomaly
+        
+    Returns:
+        Anomaly flag ID
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO anomaly_flags (transaction_id, flag_type, severity, message)
+            VALUES (?, ?, ?, ?)
+        """, (transaction_id, flag_type, severity, message))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_anomaly_flags(transaction_id: int = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """Get anomaly flags, optionally filtered by transaction."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if transaction_id:
+            cursor.execute("""
+                SELECT af.*, t.amount, t.merchant, t.txn_date
+                FROM anomaly_flags af
+                JOIN transactions t ON af.transaction_id = t.id
+                WHERE af.transaction_id = ?
+                ORDER BY af.created_at DESC
+            """, (transaction_id,))
+        else:
+            cursor.execute("""
+                SELECT af.*, t.amount, t.merchant, t.txn_date
+                FROM anomaly_flags af
+                JOIN transactions t ON af.transaction_id = t.id
+                ORDER BY af.created_at DESC
+                LIMIT ?
+            """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def update_trust_score(txn_id: int, score: float) -> bool:
+    """Update the trust score of a transaction."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE transactions
+            SET trust_score = ?
+            WHERE id = ?
+        """, (score, txn_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def increment_verification_count(txn_id: int) -> int:
+    """Increment the verification count and return new count."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE transactions
+            SET verification_count = verification_count + 1
+            WHERE id = ?
+        """, (txn_id,))
+        conn.commit()
+        
+        cursor.execute("SELECT verification_count FROM transactions WHERE id = ?", (txn_id,))
+        row = cursor.fetchone()
+        return row['verification_count'] if row else 0
+
+
+def get_transaction_stats() -> Dict[str, Any]:
+    """Get transaction statistics for anomaly detection baselines."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                AVG(amount) as avg_amount,
+                MAX(amount) as max_amount,
+                MIN(amount) as min_amount,
+                COUNT(*) as total_count
+            FROM transactions
+            WHERE txn_type IN ('debited', 'spent', 'withdrawn')
+        """)
+        row = cursor.fetchone()
+        return dict(row) if row else {}
+
+
+# ============ Phase 6: Pattern Analysis Functions ============
+
+def update_location_pattern(latitude: float, longitude: float, cluster_radius: float = 500) -> int:
+    """
+    Update or create a location pattern entry.
+    If a nearby location exists (within cluster_radius), increment its count.
+    Otherwise, create a new pattern entry.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Check for existing nearby location
+        cursor.execute("""
+            SELECT id, latitude, longitude, visit_count FROM location_patterns
+        """)
+        
+        for row in cursor.fetchall():
+            # Simple distance check (approximate)
+            lat_diff = abs(row['latitude'] - latitude)
+            lng_diff = abs(row['longitude'] - longitude)
+            # Rough conversion: 0.001 degrees ≈ 111 meters
+            if lat_diff < 0.005 and lng_diff < 0.005:  # ~500m
+                cursor.execute("""
+                    UPDATE location_patterns
+                    SET visit_count = visit_count + 1, last_visited = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (row['id'],))
+                conn.commit()
+                return row['id']
+        
+        # Create new pattern
+        cursor.execute("""
+            INSERT INTO location_patterns (latitude, longitude, cluster_radius)
+            VALUES (?, ?, ?)
+        """, (latitude, longitude, cluster_radius))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def update_time_pattern(hour: int, day_of_week: int) -> int:
+    """Update or create a time pattern entry."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id FROM time_patterns WHERE hour_of_day = ? AND day_of_week = ?
+        """, (hour, day_of_week))
+        row = cursor.fetchone()
+        
+        if row:
+            cursor.execute("""
+                UPDATE time_patterns SET txn_count = txn_count + 1 WHERE id = ?
+            """, (row['id'],))
+            conn.commit()
+            return row['id']
+        
+        cursor.execute("""
+            INSERT INTO time_patterns (hour_of_day, day_of_week) VALUES (?, ?)
+        """, (hour, day_of_week))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def update_merchant_pattern(merchant_name: str, amount: float, category: str = None) -> int:
+    """Update or create a merchant pattern entry."""
+    if not merchant_name:
+        return 0
+        
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        merchant_lower = merchant_name.lower().strip()
+        
+        cursor.execute("""
+            SELECT id FROM merchant_patterns WHERE LOWER(merchant_name) = ?
+        """, (merchant_lower,))
+        row = cursor.fetchone()
+        
+        if row:
+            cursor.execute("""
+                UPDATE merchant_patterns
+                SET visit_count = visit_count + 1,
+                    total_spent = total_spent + ?,
+                    last_visited = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (amount, row['id']))
+            conn.commit()
+            return row['id']
+        
+        cursor.execute("""
+            INSERT INTO merchant_patterns (merchant_name, category, total_spent)
+            VALUES (?, ?, ?)
+        """, (merchant_name, category, amount))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_location_patterns(limit: int = 20) -> List[Dict[str, Any]]:
+    """Get all location patterns ordered by visit count."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM location_patterns ORDER BY visit_count DESC LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_time_patterns() -> List[Dict[str, Any]]:
+    """Get all time patterns."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM time_patterns ORDER BY txn_count DESC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_merchant_patterns(limit: int = 20) -> List[Dict[str, Any]]:
+    """Get merchant patterns ordered by visit count."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM merchant_patterns ORDER BY visit_count DESC LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_user_profile() -> Dict[str, Any]:
+    """Generate a comprehensive user spending profile."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Get top locations
+        cursor.execute("SELECT COUNT(*) as count FROM location_patterns")
+        location_count = cursor.fetchone()['count']
+        
+        # Get typical hours
+        cursor.execute("""
+            SELECT hour_of_day, SUM(txn_count) as total 
+            FROM time_patterns 
+            GROUP BY hour_of_day 
+            ORDER BY total DESC 
+            LIMIT 3
+        """)
+        peak_hours = [row['hour_of_day'] for row in cursor.fetchall()]
+        
+        # Get top merchants
+        cursor.execute("""
+            SELECT merchant_name, visit_count, total_spent 
+            FROM merchant_patterns 
+            ORDER BY visit_count DESC 
+            LIMIT 5
+        """)
+        top_merchants = [dict(row) for row in cursor.fetchall()]
+        
+        # Get spending stats
+        stats = get_transaction_stats()
+        
+        return {
+            'location_clusters': location_count,
+            'peak_hours': peak_hours,
+            'top_merchants': top_merchants,
+            'avg_transaction': stats.get('avg_amount', 0),
+            'total_transactions': stats.get('total_count', 0)
+        }
+
+
+def check_location_anomaly(latitude: float, longitude: float) -> Dict[str, Any]:
+    """Check if a location is unusual based on historical patterns."""
+    patterns = get_location_patterns(limit=50)
+    
+    if not patterns:
+        return {'is_anomaly': False, 'reason': 'No location history yet'}
+    
+    for pattern in patterns:
+        lat_diff = abs(pattern['latitude'] - latitude)
+        lng_diff = abs(pattern['longitude'] - longitude)
+        if lat_diff < 0.01 and lng_diff < 0.01:  # ~1km
+            return {
+                'is_anomaly': False,
+                'reason': f"Near known location (visited {pattern['visit_count']} times)"
+            }
+    
+    return {
+        'is_anomaly': True,
+        'severity': 'medium',
+        'reason': 'Location not in usual transaction areas'
+    }
+
+
+def check_time_anomaly(hour: int, day_of_week: int) -> Dict[str, Any]:
+    """Check if transaction time is unusual."""
+    patterns = get_time_patterns()
+    
+    if not patterns:
+        return {'is_anomaly': False, 'reason': 'No time history yet'}
+    
+    # Check for this specific hour+day
+    for pattern in patterns:
+        if pattern['hour_of_day'] == hour and pattern['day_of_week'] == day_of_week:
+            if pattern['txn_count'] >= 3:
+                return {'is_anomaly': False, 'reason': f"Common time slot (used {pattern['txn_count']} times)"}
+    
+    # Check for unusual hours (0-6 AM)
+    if 0 <= hour <= 6:
+        return {
+            'is_anomaly': True,
+            'severity': 'low',
+            'reason': f"Unusual hour: {hour}:00 (early morning)"
+        }
+    
+    return {'is_anomaly': False, 'reason': 'Normal transaction time'}
 
 
 # Initialize database when module is imported

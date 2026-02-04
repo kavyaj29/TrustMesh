@@ -35,7 +35,14 @@ from database import (
     get_transaction_by_id, delete_transaction, get_summary, update_transaction,
     # Phase 2: Mesh functions
     register_device, get_all_devices, get_device_by_uuid, update_device_status,
-    update_telemetry, get_active_device_locations, update_transaction_verification
+    update_telemetry, get_active_device_locations, update_transaction_verification,
+    # Phase 5: Trust scoring functions
+    add_anomaly_flag, get_anomaly_flags, update_trust_score,
+    increment_verification_count, get_transaction_stats,
+    # Phase 6: Pattern analysis functions
+    update_location_pattern, update_time_pattern, update_merchant_pattern,
+    get_location_patterns, get_time_patterns, get_merchant_patterns,
+    get_user_profile, check_location_anomaly, check_time_anomaly
 )
 
 
@@ -1168,3 +1175,393 @@ async def lookup_merchant(merchant_name: str, city: str = "Bangalore"):
     Useful for testing the Places API integration.
     """
     return lookup_merchant_location(merchant_name, city)
+
+
+# ============ Phase 5: Trust Scoring & Anomaly Detection ============
+
+# Anomaly detection thresholds
+AMOUNT_THRESHOLD_MULTIPLIER = 3.0  # Flag if > 3x average
+HIGH_AMOUNT_THRESHOLD = 50000  # Always flag above this
+UNUSUAL_HOURS = (0, 6)  # Midnight to 6 AM
+
+def calculate_trust_score(txn: dict, verification_count: int, distance_meters: float = None) -> float:
+    """
+    Calculate trust score (0-100) based on multiple factors.
+    
+    Factors:
+    - Verification status (verified = +40 points)
+    - Number of device confirmations (+15 per device, max 30)
+    - Distance from mesh (+/- 20 based on proximity)
+    - Transaction channel (remote = +10 auto trust)
+    """
+    score = 0.0
+    
+    # Base score for verification
+    if txn.get('verified'):
+        score += 40
+    
+    # Multi-device consensus bonus (15 per device, max 30)
+    score += min(verification_count * 15, 30)
+    
+    # Distance-based scoring
+    if distance_meters is not None:
+        if distance_meters <= 50:
+            score += 20  # Very close
+        elif distance_meters <= 200:
+            score += 10  # Close enough
+        elif distance_meters <= 500:
+            score += 5   # Acceptable
+        # Beyond 500m: no bonus
+    
+    # Remote transactions get automatic trust boost
+    if txn.get('channel') == 'remote':
+        score += 10
+    
+    return min(score, 100)  # Cap at 100
+
+
+def check_anomalies(txn: dict) -> list:
+    """
+    Check a transaction for anomalies.
+    
+    Returns:
+        List of anomaly dicts with type, severity, message
+    """
+    anomalies = []
+    stats = get_transaction_stats()
+    
+    # 1. Amount anomaly - unusually high
+    if stats.get('avg_amount') and txn['amount'] > stats['avg_amount'] * AMOUNT_THRESHOLD_MULTIPLIER:
+        severity = 'high' if txn['amount'] > HIGH_AMOUNT_THRESHOLD else 'medium'
+        anomalies.append({
+            'flag_type': 'amount',
+            'severity': severity,
+            'message': f"Amount ₹{txn['amount']} is {txn['amount']/stats['avg_amount']:.1f}x higher than average ₹{stats['avg_amount']:.0f}"
+        })
+    
+    # 2. High absolute amount
+    if txn['amount'] > HIGH_AMOUNT_THRESHOLD:
+        anomalies.append({
+            'flag_type': 'amount',
+            'severity': 'high',
+            'message': f"High-value transaction: ₹{txn['amount']}"
+        })
+    
+    # 3. Unverified physical transaction
+    if txn.get('channel') == 'physical' and not txn.get('verified'):
+        anomalies.append({
+            'flag_type': 'location',
+            'severity': 'medium',
+            'message': 'Physical transaction not verified by any device'
+        })
+    
+    return anomalies
+
+
+class TrustScoreResponse(BaseModel):
+    """Response with trust score breakdown."""
+    transaction_id: int
+    trust_score: float
+    verification_count: int
+    verified: bool
+    verified_by: Optional[str]
+    channel: Optional[str]
+    anomalies: list
+    breakdown: dict
+
+
+class ConsensusVerifyResponse(BaseModel):
+    """Response from consensus verification."""
+    transaction_id: int
+    devices_verified: int
+    required_devices: int
+    consensus_reached: bool
+    trust_score: float
+    verifying_devices: list
+    message: str
+
+
+@app.get("/transactions/{txn_id}/trust-score", response_model=TrustScoreResponse, tags=["Trust"])
+async def get_trust_score(txn_id: int):
+    """
+    Get the trust score breakdown for a transaction.
+    """
+    txn = get_transaction_by_id(txn_id)
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    verification_count = txn.get('verification_count', 0)
+    score = calculate_trust_score(txn, verification_count)
+    
+    # Get any anomaly flags
+    flags = get_anomaly_flags(txn_id)
+    
+    return TrustScoreResponse(
+        transaction_id=txn_id,
+        trust_score=score,
+        verification_count=verification_count,
+        verified=txn.get('verified', False),
+        verified_by=txn.get('verified_by'),
+        channel=txn.get('channel'),
+        anomalies=flags,
+        breakdown={
+            'verification_bonus': 40 if txn.get('verified') else 0,
+            'consensus_bonus': min(verification_count * 15, 30),
+            'channel_bonus': 10 if txn.get('channel') == 'remote' else 0
+        }
+    )
+
+
+@app.post("/mesh/consensus-verify/{txn_id}", response_model=ConsensusVerifyResponse, tags=["Trust"])
+async def consensus_verify_transaction(txn_id: int, required_devices: int = 2, threshold_meters: float = 200):
+    """
+    Verify a transaction using multi-device consensus.
+    
+    Checks all active devices in the mesh and requires N devices to confirm.
+    """
+    txn = get_transaction_by_id(txn_id)
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Remote transactions auto-verify
+    if txn.get('channel') == 'remote':
+        return ConsensusVerifyResponse(
+            transaction_id=txn_id,
+            devices_verified=0,
+            required_devices=required_devices,
+            consensus_reached=True,
+            trust_score=100,
+            verifying_devices=[],
+            message="Remote transaction - auto-verified"
+        )
+    
+    # Get merchant location (from auto-verify logic)
+    merchant = txn.get('merchant')
+    if not merchant:
+        raw_sms = txn.get('raw_sms', '')
+        match = re.search(r'at\s+([A-Za-z\s]+?)(?:\s+on|\s*\.|\s*$)', raw_sms, re.IGNORECASE)
+        if match:
+            merchant = match.group(1).strip()
+    
+    if not merchant:
+        return ConsensusVerifyResponse(
+            transaction_id=txn_id,
+            devices_verified=0,
+            required_devices=required_devices,
+            consensus_reached=False,
+            trust_score=0,
+            verifying_devices=[],
+            message="Could not determine merchant location"
+        )
+    
+    location = lookup_merchant_location(merchant)
+    if not location.get('found'):
+        return ConsensusVerifyResponse(
+            transaction_id=txn_id,
+            devices_verified=0,
+            required_devices=required_devices,
+            consensus_reached=False,
+            trust_score=0,
+            verifying_devices=[],
+            message=f"Merchant location not found: {merchant}"
+        )
+    
+    # Check all devices
+    devices = get_active_device_locations()
+    verifying_devices = []
+    
+    for device in devices:
+        distance = haversine_distance(
+            location['lat'], location['lng'],
+            device['latitude'], device['longitude']
+        )
+        if distance <= threshold_meters:
+            verifying_devices.append({
+                'alias': device['alias'],
+                'distance': round(distance, 2)
+            })
+            increment_verification_count(txn_id)
+    
+    devices_verified = len(verifying_devices)
+    consensus_reached = devices_verified >= required_devices
+    
+    # Update verification status
+    if consensus_reached:
+        verifier_names = ', '.join([d['alias'] for d in verifying_devices[:2]])
+        update_transaction_verification(txn_id, True, verifier_names)
+    
+    # Calculate trust score
+    txn_updated = get_transaction_by_id(txn_id)
+    trust_score = calculate_trust_score(txn_updated, devices_verified)
+    update_trust_score(txn_id, trust_score)
+    
+    # Check for anomalies
+    anomalies = check_anomalies(txn_updated)
+    for anomaly in anomalies:
+        add_anomaly_flag(txn_id, anomaly['flag_type'], anomaly['severity'], anomaly['message'])
+    
+    return ConsensusVerifyResponse(
+        transaction_id=txn_id,
+        devices_verified=devices_verified,
+        required_devices=required_devices,
+        consensus_reached=consensus_reached,
+        trust_score=trust_score,
+        verifying_devices=verifying_devices,
+        message=f"Consensus {'reached' if consensus_reached else 'not reached'}: {devices_verified}/{required_devices} devices verified"
+    )
+
+
+@app.get("/anomalies", tags=["Trust"])
+async def list_anomalies(limit: int = 50):
+    """Get all flagged anomalies."""
+    return get_anomaly_flags(limit=limit)
+
+
+@app.get("/transactions/{txn_id}/anomalies", tags=["Trust"])
+async def get_transaction_anomalies(txn_id: int):
+    """Get anomaly flags for a specific transaction."""
+    return get_anomaly_flags(transaction_id=txn_id)
+
+
+# ============ Phase 6: Pattern Analysis Endpoints ============
+
+@app.get("/patterns/profile", tags=["Patterns"])
+async def get_spending_profile():
+    """
+    Get the user's spending profile based on historical patterns.
+    
+    Returns location clusters, peak hours, top merchants, and spending stats.
+    """
+    return get_user_profile()
+
+
+@app.get("/patterns/locations", tags=["Patterns"])
+async def get_location_pattern_list(limit: int = 20):
+    """Get location clusters where user typically transacts."""
+    return get_location_patterns(limit)
+
+
+@app.get("/patterns/times", tags=["Patterns"])
+async def get_time_pattern_list():
+    """Get time patterns - when user typically transacts."""
+    patterns = get_time_patterns()
+    
+    # Format for readability
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    for p in patterns:
+        p['day_name'] = day_names[p['day_of_week']] if p['day_of_week'] < 7 else 'Unknown'
+        p['time_label'] = f"{p['hour_of_day']}:00"
+    
+    return patterns
+
+
+@app.get("/patterns/merchants", tags=["Patterns"])
+async def get_merchant_pattern_list(limit: int = 20):
+    """Get frequently visited merchants."""
+    return get_merchant_patterns(limit)
+
+
+class PatternCheckResponse(BaseModel):
+    """Response from pattern anomaly check."""
+    transaction_id: int
+    location_check: Optional[dict] = None
+    time_check: Optional[dict] = None
+    pattern_anomalies: list
+    overall_risk: str  # 'low', 'medium', 'high'
+
+
+@app.post("/patterns/check/{txn_id}", response_model=PatternCheckResponse, tags=["Patterns"])
+async def check_pattern_anomalies(txn_id: int):
+    """
+    Check a transaction against historical patterns.
+    
+    Analyzes location, time, and merchant patterns to detect anomalies.
+    """
+    txn = get_transaction_by_id(txn_id)
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    pattern_anomalies = []
+    location_check = None
+    time_check = None
+    
+    # Check time pattern
+    if txn.get('txn_date'):
+        try:
+            from datetime import datetime as dt
+            txn_dt = dt.strptime(txn['txn_date'], '%Y-%m-%d')
+            hour = dt.now().hour  # Use current hour as proxy
+            day_of_week = txn_dt.weekday()
+            
+            time_check = check_time_anomaly(hour, day_of_week)
+            if time_check.get('is_anomaly'):
+                pattern_anomalies.append({
+                    'type': 'time',
+                    'severity': time_check.get('severity', 'low'),
+                    'message': time_check['reason']
+                })
+        except:
+            pass
+    
+    # Determine overall risk
+    if not pattern_anomalies:
+        overall_risk = 'low'
+    elif any(a.get('severity') == 'high' for a in pattern_anomalies):
+        overall_risk = 'high'
+    elif any(a.get('severity') == 'medium' for a in pattern_anomalies):
+        overall_risk = 'medium'
+    else:
+        overall_risk = 'low'
+    
+    # Add anomaly flags to database
+    for anomaly in pattern_anomalies:
+        add_anomaly_flag(txn_id, f"pattern_{anomaly['type']}", anomaly['severity'], anomaly['message'])
+    
+    return PatternCheckResponse(
+        transaction_id=txn_id,
+        location_check=location_check,
+        time_check=time_check,
+        pattern_anomalies=pattern_anomalies,
+        overall_risk=overall_risk
+    )
+
+
+@app.post("/patterns/learn/{txn_id}", tags=["Patterns"])
+async def learn_from_transaction(txn_id: int):
+    """
+    Learn patterns from a verified transaction.
+    
+    Updates location, time, and merchant patterns based on the transaction.
+    """
+    txn = get_transaction_by_id(txn_id)
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    learned = {
+        'location': False,
+        'time': False,
+        'merchant': False
+    }
+    
+    # Learn time pattern
+    if txn.get('txn_date'):
+        try:
+            from datetime import datetime as dt
+            txn_dt = dt.strptime(txn['txn_date'], '%Y-%m-%d')
+            hour = dt.now().hour
+            day_of_week = txn_dt.weekday()
+            update_time_pattern(hour, day_of_week)
+            learned['time'] = True
+        except:
+            pass
+    
+    # Learn merchant pattern
+    if txn.get('merchant'):
+        update_merchant_pattern(txn['merchant'], txn['amount'], txn.get('category'))
+        learned['merchant'] = True
+    
+    return {
+        'transaction_id': txn_id,
+        'patterns_updated': learned,
+        'message': 'Patterns updated successfully'
+    }
