@@ -1,7 +1,7 @@
 // API Service for Expense Tracker
 // Connects to the FastAPI backend
 
-const API_BASE_URL = 'http://localhost:8001'; // Local backend runs on port 8001 on this machine
+const API_BASE_URL = 'http://localhost:8080'; // Local backend runs on port 8080
 
 export const api = {
   // Parse SMS and save as transaction

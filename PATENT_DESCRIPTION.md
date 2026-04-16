@@ -562,8 +562,7 @@ This system presents a novel approach to personal expense tracking by leveraging
 
 ```
 # Python (Backend)
-fastapi>=0.104.0
-uvicorn>=0.24.0
+fastapi[standard]>=0.115.0
 spacy>=3.7.0
 pydantic>=2.5.0
 

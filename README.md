@@ -69,7 +69,7 @@ Iterations: 30
 ### 3. Run the API Server
 
 ```bash
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
+fastapi run api.py --host 0.0.0.0 --port 8080
 ```
 
 Or simply:
@@ -77,11 +77,21 @@ Or simply:
 python api.py
 ```
 
-### 4. Test the API
+### 4. Run Mobile Frontend (Web)
+
+From the `mobile` directory:
+
+```bash
+npm run web
+```
+
+Expo web runs on port `8081` by default.
+
+### 5. Test the API
 
 **Using curl:**
 ```bash
-curl -X POST "http://localhost:8000/extract" \
+curl -X POST "http://localhost:8080/extract" \
      -H "Content-Type: application/json" \
      -d '{"sms": "HDFC Bank: Rs. 5,000 credited to a/c XX1234 on 14-Dec-2024"}'
 ```
@@ -104,8 +114,8 @@ curl -X POST "http://localhost:8000/extract" \
 
 Once the server is running, access the interactive documentation:
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:8080/docs
+- **ReDoc**: http://localhost:8080/redoc
 
 ### Available Endpoints
 

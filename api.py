@@ -10,10 +10,10 @@ Endpoints:
     GET / - API information
 
 Usage:
-    uvicorn api:app --reload --host 0.0.0.0 --port 8000
+    fastapi run api.py --host 0.0.0.0 --port 8080
 
 Example Request:
-    curl -X POST "http://localhost:8000/extract" \
+    curl -X POST "http://localhost:8080/extract" \
          -H "Content-Type: application/json" \
          -d '{"sms": "HDFC Bank: Rs. 5,000 credited to a/c XX1234 on 14-Dec-2024"}'
 """
@@ -819,7 +819,8 @@ async def modify_transaction(
 # ============ Main Entry Point ============
 
 if __name__ == "__main__":
-    import uvicorn
+    import subprocess
+    import sys
     
     # Initialize database
     init_database()
@@ -827,14 +828,21 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Starting Expense Tracker API Server")
     print("=" * 60)
-    
-    # Run the server
-    uvicorn.run(
-        "api:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
+
+    # Start the API using the FastAPI CLI.
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fastapi",
+            "run",
+            "api.py",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8080",
+        ],
+        check=False,
     )
 
 
