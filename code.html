@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Expense Ledgers Overview</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Icons -->
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Theme Config -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#3c83f6",
+              "background-light": "#f5f7f8",
+              "background-dark": "#101722",
+              "card-dark": "#1E293B",
+            },
+            fontFamily: {
+              "display": ["Manrope", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .glass-nav {
+            background: rgba(16, 23, 34, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Gradient Text */
+        .text-gradient {
+            background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Hide Scrollbar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased selection:bg-primary selection:text-white h-screen overflow-hidden flex flex-col relative">
+<!-- Background Decorative Elements (Glows) -->
+<div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+<div class="absolute top-[-10%] left-[-20%] w-[500px] h-[500px] bg-primary/20 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-[10%] right-[-10%] w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[100px]"></div>
+</div>
+<!-- Header Section -->
+<header class="px-6 pt-12 pb-4 flex flex-col gap-6 z-10 shrink-0">
+<!-- Top Bar -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="h-8 w-8 rounded-full bg-gradient-to-tr from-primary to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-primary/30">
+                    JD
+                </div>
+<div class="flex flex-col">
+<span class="text-xs text-slate-400 font-medium">Welcome back</span>
+<span class="text-sm font-bold text-white leading-none">Jai Dixit</span>
+</div>
+</div>
+<button class="p-2 rounded-full hover:bg-white/5 transition-colors relative">
+<span class="material-icons-round text-slate-300">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-background-dark"></span>
+</button>
+</div>
+<!-- Month Selector & Total -->
+<div class="flex flex-col gap-1">
+<button class="flex items-center gap-1 text-slate-400 text-sm font-medium hover:text-white transition-colors w-fit">
+                October 2023
+                <span class="material-icons-round text-base">expand_more</span>
+</button>
+<div class="flex items-baseline gap-2">
+<h1 class="text-4xl font-extrabold text-gradient">₹85,240</h1>
+<span class="text-sm font-medium text-slate-400">spent this month</span>
+</div>
+</div>
+<!-- AI Insight Badge (Context: AI SMS Parsing) -->
+<div class="glass-panel rounded-lg p-3 flex items-center gap-3">
+<div class="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+<span class="material-icons-round text-primary text-sm">auto_awesome</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-xs text-slate-300 truncate">New transaction detected from HDFC Bank via SMS.</p>
+<p class="text-[10px] text-primary font-bold mt-0.5">AUTO-SYNCED JUST NOW</p>
+</div>
+<span class="material-icons-round text-slate-500 text-sm">chevron_right</span>
+</div>
+</header>
+<!-- Main Content: Ledgers Grid -->
+<main class="flex-1 overflow-y-auto no-scrollbar px-6 pb-28 pt-2 z-10">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-lg font-bold text-white">Your Ledgers</h2>
+<button class="text-primary text-sm font-semibold">See Analytics</button>
+</div>
+<!-- Grid -->
+<div class="grid grid-cols-2 gap-4">
+<!-- Card 1: Food -->
+<div class="glass-panel rounded-xl p-4 flex flex-col gap-4 group active:scale-[0.98] transition-transform duration-200">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-xl border border-orange-500/10">
+                        🍔
+                    </div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-icons-round text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<h3 class="text-slate-300 text-sm font-medium mb-1">Food &amp; Dining</h3>
+<p class="text-white text-lg font-bold">₹12,400</p>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+<div class="bg-orange-500 h-1.5 rounded-full" style="width: 75%"></div>
+</div>
+<p class="text-[10px] text-slate-400 flex justify-between">
+<span>75% used</span>
+<span>of ₹16k</span>
+</p>
+</div>
+</div>
+<!-- Card 2: Rent -->
+<div class="glass-panel rounded-xl p-4 flex flex-col gap-4 group active:scale-[0.98] transition-transform duration-200">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center text-xl border border-indigo-500/10">
+                        🏠
+                    </div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-icons-round text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<h3 class="text-slate-300 text-sm font-medium mb-1">Rent &amp; Utils</h3>
+<p class="text-white text-lg font-bold">₹25,000</p>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+<div class="bg-indigo-500 h-1.5 rounded-full" style="width: 100%"></div>
+</div>
+<p class="text-[10px] text-slate-400 flex justify-between">
+<span class="text-indigo-400 font-medium">Completed</span>
+<span>of ₹25k</span>
+</p>
+</div>
+</div>
+<!-- Card 3: Travel -->
+<div class="glass-panel rounded-xl p-4 flex flex-col gap-4 group active:scale-[0.98] transition-transform duration-200">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-xl border border-emerald-500/10">
+                        🚗
+                    </div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-icons-round text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<h3 class="text-slate-300 text-sm font-medium mb-1">Commute</h3>
+<p class="text-white text-lg font-bold">₹1,200</p>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+<div class="bg-emerald-500 h-1.5 rounded-full" style="width: 12%"></div>
+</div>
+<p class="text-[10px] text-slate-400 flex justify-between">
+<span>12% used</span>
+<span>of ₹10k</span>
+</p>
+</div>
+</div>
+<!-- Card 4: Entertainment -->
+<div class="glass-panel rounded-xl p-4 flex flex-col gap-4 group active:scale-[0.98] transition-transform duration-200">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center text-xl border border-pink-500/10">
+                        🍿
+                    </div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-icons-round text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<h3 class="text-slate-300 text-sm font-medium mb-1">Fun &amp; Movies</h3>
+<p class="text-white text-lg font-bold">₹3,450</p>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+<div class="bg-pink-500 h-1.5 rounded-full" style="width: 68%"></div>
+</div>
+<p class="text-[10px] text-slate-400 flex justify-between">
+<span>68% used</span>
+<span>of ₹5k</span>
+</p>
+</div>
+</div>
+<!-- Card 5: Shopping -->
+<div class="glass-panel rounded-xl p-4 flex flex-col gap-4 group active:scale-[0.98] transition-transform duration-200">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-xl border border-purple-500/10">
+                        🛍️
+                    </div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-icons-round text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<h3 class="text-slate-300 text-sm font-medium mb-1">Shopping</h3>
+<p class="text-white text-lg font-bold">₹15,800</p>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+<div class="bg-red-500 h-1.5 rounded-full" style="width: 95%"></div>
+</div>
+<p class="text-[10px] text-slate-400 flex justify-between">
+<span class="text-red-400 font-bold">Over Budget</span>
+<span>of ₹15k</span>
+</p>
+</div>
+</div>
+<!-- Card 6: Investments -->
+<div class="glass-panel rounded-xl p-4 flex flex-col gap-4 group active:scale-[0.98] transition-transform duration-200 border-primary/30 shadow-[0_0_15px_rgba(60,131,246,0.1)]">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center text-xl border border-primary/20">
+                        📈
+                    </div>
+<button class="text-slate-500 hover:text-white">
+<span class="material-icons-round text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<h3 class="text-slate-300 text-sm font-medium mb-1">SIPs &amp; Stocks</h3>
+<p class="text-white text-lg font-bold">₹20,000</p>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 100%"></div>
+</div>
+<p class="text-[10px] text-slate-400 flex justify-between">
+<span class="text-primary font-medium">Goal Met</span>
+<span>of ₹20k</span>
+</p>
+</div>
+</div>
+<!-- Add New Placeholder -->
+<button class="rounded-xl border border-dashed border-slate-700 flex flex-col items-center justify-center p-4 gap-2 text-slate-500 hover:text-primary hover:border-primary/50 hover:bg-primary/5 transition-all h-[154px]">
+<span class="material-icons-round text-3xl opacity-50">add_circle_outline</span>
+<span class="text-xs font-medium">Create Ledger</span>
+</button>
+</div>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-6 h-14 w-14 bg-primary rounded-full shadow-lg shadow-primary/40 flex items-center justify-center z-50 hover:scale-105 active:scale-95 transition-all text-white">
+<span class="material-icons-round text-3xl">add</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="glass-nav fixed bottom-0 w-full h-20 pb-4 px-6 flex justify-between items-center z-40">
+<a class="flex flex-col items-center gap-1 w-16 group" href="#">
+<span class="material-icons-round text-slate-500 group-hover:text-slate-300 transition-colors text-2xl">home</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-slate-300">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 w-16 group" href="#">
+<div class="relative">
+<span class="material-icons-round text-primary text-2xl drop-shadow-[0_0_8px_rgba(60,131,246,0.6)]">pie_chart</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
+</div>
+<span class="text-[10px] font-medium text-primary">Ledgers</span>
+</a>
+<div class="w-12"></div> <!-- Spacer for FAB visual balance -->
+<a class="flex flex-col items-center gap-1 w-16 group" href="#">
+<span class="material-icons-round text-slate-500 group-hover:text-slate-300 transition-colors text-2xl">bar_chart</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-slate-300">Reports</span>
+</a>
+<a class="flex flex-col items-center gap-1 w-16 group" href="#">
+<span class="material-icons-round text-slate-500 group-hover:text-slate-300 transition-colors text-2xl">account_circle</span>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-slate-300">Profile</span>
+</a>
+</nav>
+<!-- Modal for Color Picker (Simulated Interaction State - Hidden by default in simple view but structured here for completeness) -->
+<!-- Not visible, but implying where the 'Create' action leads -->
+</body></html>

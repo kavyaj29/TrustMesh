@@ -24,7 +24,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-import spacy
+try:
+    import spacy
+    SPACY_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: Failed to import spacy: {e}")
+    SPACY_AVAILABLE = False
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -42,7 +48,11 @@ from database import (
     # Phase 6: Pattern analysis functions
     update_location_pattern, update_time_pattern, update_merchant_pattern,
     get_location_patterns, get_time_patterns, get_merchant_patterns,
-    get_user_profile, check_location_anomaly, check_time_anomaly
+    get_user_profile, check_location_anomaly, check_time_anomaly,
+    # Functionality: Budget, Recurring, Export
+    create_budget, get_all_budgets, delete_budget, check_budget_alerts,
+    detect_recurring_patterns, get_recurring_patterns,
+    get_transactions_for_export
 )
 
 
@@ -202,7 +212,10 @@ app.add_middleware(
 
 # Global variable to hold the loaded model
 # We load once at startup rather than on each request for performance
-nlp_model: Optional[spacy.language.Language] = None
+if SPACY_AVAILABLE:
+    nlp_model: Optional[spacy.language.Language] = None
+else:
+    nlp_model = None
 
 
 def load_model():
@@ -214,6 +227,10 @@ def load_model():
     """
     global nlp_model
     
+    if not SPACY_AVAILABLE:
+        print("[WARNING] Could not load model: spacy is not available on this Python version.")
+        return None
+        
     if not MODEL_PATH.exists():
         print(f"[WARNING] Model not found at: {MODEL_PATH.absolute()}")
         print("  Please run 'python train_model.py' first to train the model.")
@@ -637,6 +654,135 @@ async def get_transactions_summary(
     """
     summary = get_summary(period=period, start_date=start_date, end_date=end_date)
     return SummaryResponse(**summary)
+
+
+@app.get("/transactions/chart-data", tags=["Transactions"])
+async def get_chart_data():
+    """
+    Get aggregated chart data for visualizations.
+    Returns spending by category and daily spending for last 7 days.
+    """
+    from database import get_db_connection
+    from datetime import datetime, timedelta
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Spending by transaction type (for pie chart)
+        cursor.execute("""
+            SELECT txn_type, SUM(amount) as total, COUNT(*) as count
+            FROM transactions
+            WHERE txn_type IN ('debited', 'spent', 'withdrawn', 'credited', 'received', 'deposited')
+            GROUP BY txn_type
+            ORDER BY total DESC
+        """)
+        by_type = [dict(row) for row in cursor.fetchall()]
+        
+        # Daily spending for last 7 days (for bar chart)
+        seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        cursor.execute("""
+            SELECT txn_date, SUM(amount) as total, COUNT(*) as count
+            FROM transactions
+            WHERE txn_type IN ('debited', 'spent', 'withdrawn')
+            AND txn_date >= ?
+            GROUP BY txn_date
+            ORDER BY txn_date
+        """, (seven_days_ago,))
+        daily = [dict(row) for row in cursor.fetchall()]
+        
+        # Spending by category (for pie chart)
+        cursor.execute("""
+            SELECT COALESCE(category, 'Other') as category, SUM(amount) as total
+            FROM transactions
+            WHERE txn_type IN ('debited', 'spent', 'withdrawn')
+            GROUP BY category
+            ORDER BY total DESC
+        """)
+        by_category = [dict(row) for row in cursor.fetchall()]
+    
+    return {
+        "by_type": by_type,
+        "daily_spending": daily,
+        "by_category": by_category
+    }
+
+
+# ============ Export ============
+
+@app.get("/transactions/export", tags=["Export"])
+async def export_transactions(
+    format: str = "csv",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """
+    Export transactions as CSV or text report.
+    Use format=csv or format=pdf.
+    """
+    from fastapi.responses import StreamingResponse
+    import io
+    
+    transactions = get_transactions_for_export(start_date, end_date)
+    
+    if format == "csv":
+        output = io.StringIO()
+        headers = ['ID', 'Amount', 'Type', 'Date', 'Account', 'Merchant', 'Category', 'Currency', 'Balance']
+        output.write(','.join(headers) + '\n')
+        for txn in transactions:
+            row = [
+                str(txn.get('id', '')),
+                str(txn.get('amount', '')),
+                str(txn.get('txn_type') or ''),
+                str(txn.get('txn_date') or ''),
+                str(txn.get('account') or ''),
+                str(txn.get('merchant') or ''),
+                str(txn.get('category') or ''),
+                str(txn.get('currency') or 'INR'),
+                str(txn.get('balance') or ''),
+            ]
+            output.write(','.join(row) + '\n')
+        
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=transactions.csv"}
+        )
+    
+    elif format == "pdf":
+        output = io.StringIO()
+        output.write("EXPENSE TRACKER - TRANSACTION REPORT\n")
+        output.write("=" * 60 + "\n\n")
+        total_spent = 0
+        total_credited = 0
+        for txn in transactions:
+            amount = txn.get('amount', 0)
+            txn_type = txn.get('txn_type', '')
+            currency = txn.get('currency', 'INR')
+            if txn_type in ['debited', 'spent', 'withdrawn']:
+                total_spent += amount
+                sign = '-'
+            else:
+                total_credited += amount
+                sign = '+'
+            output.write(f"Date: {txn.get('txn_date', 'N/A')}\n")
+            output.write(f"Amount: {sign}{currency} {amount:,.2f}\n")
+            output.write(f"Type: {txn_type} | Account: {txn.get('account', 'N/A')}\n")
+            output.write(f"Merchant: {txn.get('merchant', 'N/A')} | Category: {txn.get('category', 'N/A')}\n")
+            output.write("-" * 40 + "\n")
+        output.write(f"\nSUMMARY\n")
+        output.write(f"Total Spent: INR {total_spent:,.2f}\n")
+        output.write(f"Total Credited: INR {total_credited:,.2f}\n")
+        output.write(f"Net: INR {total_credited - total_spent:,.2f}\n")
+        output.write(f"Total Transactions: {len(transactions)}\n")
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            media_type="text/plain",
+            headers={"Content-Disposition": "attachment; filename=transactions_report.txt"}
+        )
+    
+    raise HTTPException(status_code=400, detail="Format must be 'csv' or 'pdf'")
 
 
 @app.get("/transactions/{txn_id}", response_model=TransactionResponse, tags=["Transactions"])
@@ -1565,3 +1711,50 @@ async def learn_from_transaction(txn_id: int):
         'patterns_updated': learned,
         'message': 'Patterns updated successfully'
     }
+
+
+# ============ Budget Alerts ============
+
+class BudgetRequest(BaseModel):
+    category: str
+    monthly_limit: float
+
+@app.post("/budgets", tags=["Budgets"])
+async def create_new_budget(request: BudgetRequest):
+    """Create or update a budget for a category."""
+    budget_id = create_budget(request.category, request.monthly_limit)
+    return {"id": budget_id, "message": f"Budget set: {request.category} = ₹{request.monthly_limit}"}
+
+@app.get("/budgets", tags=["Budgets"])
+async def list_budgets():
+    """Get all budgets."""
+    return get_all_budgets()
+
+@app.get("/budgets/alerts", tags=["Budgets"])
+async def get_budget_alerts():
+    """Check all budgets against current month spending."""
+    return check_budget_alerts()
+
+@app.delete("/budgets/{budget_id}", tags=["Budgets"])
+async def remove_budget(budget_id: int):
+    """Delete a budget."""
+    if delete_budget(budget_id):
+        return {"message": "Budget deleted"}
+    raise HTTPException(status_code=404, detail="Budget not found")
+
+
+# ============ Recurring Transactions ============
+
+@app.post("/recurring/detect", tags=["Recurring"])
+async def detect_recurring():
+    """Auto-detect recurring transactions from transaction history."""
+    patterns = detect_recurring_patterns()
+    return {
+        "patterns_found": len(patterns),
+        "patterns": patterns
+    }
+
+@app.get("/recurring", tags=["Recurring"])
+async def list_recurring():
+    """Get all detected recurring patterns."""
+    return get_recurring_patterns()

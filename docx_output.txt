@@ -1,0 +1,308 @@
+CBS3006 – EPJ – Machine Learning
+
+<Title of the Project>
+(Times New Roman 18, Bold, Upper Case, Line spacing 1.5)
+
+
+Submitted in partial fulfillment of the requirements for the degree of
+
+Bachelor of Technology   
+
+in
+	
+<Programme>  
+
+by
+	
+(mention names of team members sorted on Register number)
+
+Under the Supervision of 
+
+
+
+
+April 2026
+
+DECLARATION
+
+
+ I    hereby    declare    that    the    project     entitled << Project Title >> submitted by me, for the award of the degree of Bachelor of Technology in Computer Science and Engineering to VIT is a record of bonafide work carried out by me under the supervision of  Dr. Nageshwar Rao Ragi.
+I further declare that the work reported in this project has not been submitted and will not be submitted, either in part or in full, for the award of any other degree or diploma in this institute or any other institute or university.
+
+
+
+
+
+
+
+Place	: Vellore Date	:
+Signature of the Candidate
+
+
+
+
+
+
+Note: Include your project title and guide name in highlighted part
+
+CERTIFICATE
+
+
+ This is to certify that the project entitled << Project Title >> submitted by << Student Name (Reg. No) >>, School of Computer Science and Engineering, VIT, for the award of the degree of Bachelor of Technology in Computer Science and Engineering, is a record of bonafide work carried out by him / her under my supervision during Winter Semester 2025-2026, as per the VIT code of academic and research ethics.
+
+The contents of this report have not been submitted and will not be submitted either in part or in full, for the award of any other degree or diploma in this institute or any other institute or university. The project fulfills the requirements and regulations of the University and in my opinion meets the necessary standards for submission.
+
+
+
+
+
+Place	: Vellore
+Date	:	
+
+			Signature of the Guide
+
+
+
+
+
+
+
+
+							      Examiner(s)
+
+
+Note: Include your project title and student names in highlighted part.
+
+
+<< Head of the Department >>
+<< Programme >>	
+ACKNOWLEDGEMENTS
+
+
+
+I am deeply grateful to the management of Vellore Institute of Technology (VIT) for providing me with the opportunity and resources to undertake this project. Their commitment to fostering a conducive learning environment has been instrumental in my academic journey. The support and infrastructure provided by VIT have enabled me to explore and develop my ideas to their fullest potential.
+
+My sincere thanks to Dr. Jaisankar N, the Dean of the School of Computer Science and Engineering (SCOPE), for his unwavering support and encouragement. His leadership and vision have greatly inspired me to strive for excellence. The Dean’s dedication to academic excellence and innovation has been a constant source of motivation for me. I appreciate his efforts in creating an environment that nurtures creativity and critical thinking.
+
+I express my profound appreciation to <Head of Department’s Name>, the Head of the <Department Name>, for his/her insightful guidance and continuous support. His/her expertise and advice have been crucial in shaping the direction of my project. The Head of Department’s commitment to fostering a collaborative and supportive atmosphere has greatly enhanced my learning experience. His/her constructive feedback and encouragement have been invaluable in overcoming challenges and achieving my project goals.
+
+I am immensely thankful to my project guide, <Guide’s Name>, for his/her dedicated mentorship and invaluable feedback. His/her patience, knowledge, and encouragement have been pivotal in the successful completion of this project. My supervisor’s willingness to share his/her expertise and provide thoughtful guidance has been instrumental in refining my ideas and methodologies. His/her support has not only contributed to the success of this project but has also enriched my overall academic experience.
+
+Thank you all for your contributions and support.
+
+
+
+Name of the Candidate
+
+
+TABLE OF CONTENTS
+	<Contents, Times New Roman 12, Line spacing 1.5>	
+
+
+
+
+List of Figures
+
+
+
+
+
+(In the chapters, figure caption should come below the figure and table caption should come above the table. Figure and table captions should be of font size 10.)
+
+List of Tables
+
+Table No.	Title	Page No.
+2.1	Table caption	28
+
+List of Abbreviations
+
+2G	Second Generation
+3GPP	Third Generation Partnership Project
+3G	Third Generation
+4G	Fourth Generation
+AWGN	Additive White Gaussian Noise
+BBE	Background Block Error
+CSMA	Carrier Sense Multiple Access
+DAS	Direct Attached Storage
+
+
+
+
+
+
+Note: All the abbreviations should follow Alphabetical order
+
+Symbols and Notations
+
+f	CFO
+	NCFO
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ABSTRACT
+
+(Times New Roman 16, Bold, Upper Case, Line spacing 1.5)
+<Contents, Times New Roman 12, Line spacing 1.15>
+One page and not exceeding 500 words (minimum 300 words)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CHAPTER 1
+1.1 INTRODUCTION
+<Contents, Times New Roman 12, Line spacing 1.15>
+
+
+CHAPTER 7
+7. REFERENCES
+<Contents, Times New Roman 12, Line spacing 1.15>
+
+<< IEEE, Harvard Format >>
+
+Apruzzese, G., Laskov, P., Montes de Oca, E., Mallouli, W., Brdalo Rapa, L., Grammatopoulos, A.V. and Di Franco, F., 2023. The role of machine learning in cybersecurity. Digital Threats: Research and Practice, 4(1), pp.1-38.
+Dasgupta, D., Akhtar, Z. and Sen, S., 2022. Machine learning in cybersecurity: a comprehensive survey. The Journal of Defense Modeling and Simulation, 19(1), pp.57-106.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+APPENDIX A – Sample Code
+
+Reg. No. 1	Student Name 1 <Upper case, Bold>
+Reg. No. 2	Student Name 2
+Reg. No. 3	Student Name 3
+Dr. Nageshwar Rao Ragi
+Associate Professor
+School of Computer Science and Engineering (SCOPE)
+Sl.No	Contents	Page No.
+	Abstract < Capitalize Each Word, Bold>	i
+1.	INTRODUCTION <Uppercase, Bold>	1
+	1.1 Background <Capitalize Each Word, Normal>	1
+	1.2 Motivations		1
+	1.3 Scope of the Project	1
+2.	PROJECT DESCRIPTION AND GOALS	
+	2.1 Literature Review	
+	2.2 Research Gap	
+	2.3 Objectives	
+	2.4 Problem Statement	
+	2.5 Project Plan	
+3.	TECHNICAL SPECIFICATION	
+	3.1 Requirements	
+	     3.1.1 Functional	
+	     3.1.2 Non-Functional	
+	3.2 Feasibility Study	
+	     3.2.1 Technical Feasibility	
+	     3.2.2 Economic Feasibility	
+	     3.2.2 Social Feasibility	
+	3.3 System Specification	
+	     3.3.1 Hardware Specification	
+	     3.3.2 Software Specification	
+4.	DESIGN APPROACH AND DETAILS	
+	4.1 System Architecture	
+	4.2 Design	
+	     4.2.1 Data Flow Diagram	
+	     4.2.2 Use Case Diagram	
+	     4.2.3 Class Diagram	
+	     4.2.4 Sequence Diagram		
+5.	METHODOLOGY AND TESTING	
+	<< Module Description >>	
+	<< Testing >>	
+6. 	PROJECT DEMONSTRATION	
+7.	RESULT AND DISCUSSION (COST ANALYSIS as applicable)	
+8.	CONCLUSION 	
+9.	REFERENCES	
+	APPENDIX A – SAMPLE CODE	
+Figure No.	Title	Page No.
+2.1	Figure caption	10
+2.2	Figure caption	15

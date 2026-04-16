@@ -190,6 +190,40 @@ def init_database():
             )
         """)
         
+        # ============ Functionality: Budget Alerts ============
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL UNIQUE,
+                monthly_limit REAL NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # ============ Functionality: Recurring Patterns ============
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS recurring_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchant TEXT NOT NULL,
+                category TEXT,
+                avg_amount REAL NOT NULL,
+                frequency_days INTEGER DEFAULT 30,
+                last_seen TEXT,
+                occurrence_count INTEGER DEFAULT 1,
+                confirmed INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # ============ Functionality: Currency Support ============
+        
+        try:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN currency TEXT DEFAULT 'INR'")
+        except:
+            pass  # Column already exists
+        
         conn.commit()
         print("[OK] Database initialized successfully")
 
@@ -953,6 +987,139 @@ def check_time_anomaly(hour: int, day_of_week: int) -> Dict[str, Any]:
         }
     
     return {'is_anomaly': False, 'reason': 'Normal transaction time'}
+
+
+# ============ Budget Functions ============
+
+def create_budget(category: str, monthly_limit: float) -> int:
+    """Create or update a budget for a category."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO budgets (category, monthly_limit)
+            VALUES (?, ?)
+            ON CONFLICT(category) DO UPDATE SET monthly_limit = ?
+        """, (category, monthly_limit, monthly_limit))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_all_budgets() -> List[Dict[str, Any]]:
+    """Get all budgets."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM budgets ORDER BY category")
+        return [dict(row) for row in cursor.fetchall()]
+
+def delete_budget(budget_id: int) -> bool:
+    """Delete a budget."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def check_budget_alerts() -> List[Dict[str, Any]]:
+    """Check all budgets against current month spending."""
+    from datetime import datetime
+    current_month = datetime.now().strftime('%Y-%m')
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        budgets = get_all_budgets()
+        alerts = []
+        
+        for budget in budgets:
+            cursor.execute("""
+                SELECT COALESCE(SUM(amount), 0) as spent
+                FROM transactions
+                WHERE category = ?
+                AND txn_type IN ('debited', 'spent', 'withdrawn')
+                AND txn_date LIKE ?
+            """, (budget['category'], f"{current_month}%"))
+            
+            row = cursor.fetchone()
+            spent = row['spent'] if row else 0
+            pct = (spent / budget['monthly_limit'] * 100) if budget['monthly_limit'] > 0 else 0
+            
+            status = 'ok'
+            if pct >= 100:
+                status = 'exceeded'
+            elif pct >= 80:
+                status = 'warning'
+            elif pct >= 50:
+                status = 'caution'
+            
+            alerts.append({
+                'budget_id': budget['id'],
+                'category': budget['category'],
+                'monthly_limit': budget['monthly_limit'],
+                'spent': spent,
+                'remaining': max(0, budget['monthly_limit'] - spent),
+                'percentage': round(pct, 1),
+                'status': status
+            })
+        
+        return alerts
+
+
+# ============ Recurring Transaction Functions ============
+
+def detect_recurring_patterns() -> List[Dict[str, Any]]:
+    """Auto-detect recurring transactions by merchant + similar amounts."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT merchant, category,
+                   AVG(amount) as avg_amount,
+                   COUNT(*) as occurrence_count,
+                   MAX(txn_date) as last_seen,
+                   MIN(txn_date) as first_seen
+            FROM transactions
+            WHERE merchant IS NOT NULL
+            AND merchant != ''
+            AND txn_type IN ('debited', 'spent', 'withdrawn')
+            GROUP BY merchant
+            HAVING COUNT(*) >= 2
+            ORDER BY occurrence_count DESC
+        """)
+        patterns = [dict(row) for row in cursor.fetchall()]
+        
+        # Save to recurring_patterns table
+        for p in patterns:
+            cursor.execute("""
+                INSERT INTO recurring_patterns (merchant, category, avg_amount, last_seen, occurrence_count)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+            """, (p['merchant'], p['category'], p['avg_amount'], p['last_seen'], p['occurrence_count']))
+        conn.commit()
+        
+        return patterns
+
+def get_recurring_patterns() -> List[Dict[str, Any]]:
+    """Get all detected recurring patterns."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM recurring_patterns ORDER BY occurrence_count DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+
+# ============ Export Functions ============
+
+def get_transactions_for_export(start_date: str = None, end_date: str = None) -> List[Dict[str, Any]]:
+    """Get all transactions formatted for export."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        query = "SELECT * FROM transactions WHERE 1=1"
+        params = []
+        if start_date:
+            query += " AND txn_date >= ?"
+            params.append(start_date)
+        if end_date:
+            query += " AND txn_date <= ?"
+            params.append(end_date)
+        query += " ORDER BY txn_date DESC"
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
 
 
 # Initialize database when module is imported
