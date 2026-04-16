@@ -49,10 +49,12 @@ def create_blank_model():
     # 'ner' is the standard Named Entity Recognition component
     ner = nlp.add_pipe("ner", last=True)
     
-    # Add our custom entity labels to the NER component
-    # These are the financial entities we want to extract
-    # Note: MODALITY and MERCHANT detection is handled by keyword-based classify_modality() function
-    labels = ["AMOUNT", "DATE", "ACCOUNT", "TXN_TYPE", "BALANCE", "BANK"]
+    # Add our custom entity labels to the NER component.
+    # Keep this list in sync with the labels supported by train_data.py.
+    labels = [
+        "AMOUNT", "DATE", "ACCOUNT", "TXN_TYPE",
+        "BALANCE", "BANK", "MODALITY", "MERCHANT"
+    ]
     for label in labels:
         ner.add_label(label)
     

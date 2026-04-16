@@ -328,6 +328,7 @@ async def extract_entities(request: SMSRequest):
         )
         for ent in doc.ents
     ]
+    entities = clean_extracted_entities(request.sms, entities)
     
     return ExtractionResponse(
         sms=request.sms,
@@ -490,24 +491,86 @@ from database import (
 
 def parse_amount(amount_str: str) -> float:
     """Parse amount string to float."""
-    # Remove currency symbols, letters, and spaces but keep digits, commas, and dots
-    cleaned = re.sub(r'[^\d,.]', '', amount_str)
-    
-    # Handle multiple dots (keep only the last one as decimal)
-    if cleaned.count('.') > 1:
-        parts = cleaned.split('.')
-        cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
-    
-    # Remove leading dots
-    cleaned = cleaned.lstrip('.')
-    
-    # Remove commas (used as thousand separators in India)
-    cleaned = cleaned.replace(',', '')
-    
+    # First extract the first numeric token like 1,234.56 / 295.00 / 5000.
+    match = re.search(r'\d[\d,]*(?:\.\d+)?', amount_str)
+    if not match:
+        return 0.0
+
+    cleaned = match.group(0).replace(',', '')
     try:
-        return float(cleaned) if cleaned else 0.0
+        return float(cleaned)
     except ValueError:
         return 0.0
+
+
+def extract_account_from_text(sms_text: str) -> Optional[str]:
+    """Extract the most likely account/card identifier from raw SMS text."""
+    patterns = [
+        r'\b(?:a/c|A/C)\s*[*Xx\d]{3,}(?:\b|\s+ending\s+\d{2,})',
+        r'\b(?:a/c|A/C)\s*(?:ending\s*)?\d{2,}\b',
+        r'\bAcct\s*(?:ending\s*)?[*Xx\d]{3,}\b',
+        r'\baccount\s*(?:no\.?\s*)?(?:ending\s*)?[*Xx\d]{3,}\b',
+        r'\b(?:Credit|Debit)\s+Card\s*(?:ending\s*)?[*Xx\d]{3,}\b',
+        r'\bCard\s*(?:ending\s*)?[*Xx\d]{3,}\b',
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, sms_text, re.IGNORECASE)
+        if m:
+            return m.group(0).strip()
+
+    return None
+
+def clean_extracted_entities(sms_text: str, entities: List[Entity]) -> List[Entity]:
+    """Apply lightweight sanity rules to reduce obvious NER misclassifications."""
+    cleaned: List[Entity] = []
+
+    account_from_text = extract_account_from_text(sms_text)
+    balance_match = re.search(
+        r'(?:Avl\s*(?:Bal|bal|balance|limit)?|Available\s+balance|bal(?:ance)?)\s*:?\s*((?:INR|Rs\.?|Rs:)?\s*\d[\d,]*(?:\.\d+)?)',
+        sms_text,
+        re.IGNORECASE,
+    )
+    clean_balance_text = balance_match.group(1).strip() if balance_match else None
+
+    # Track whether we already inserted a trusted account entity.
+    inserted_account = False
+
+    for ent in entities:
+        text = ent.text.strip()
+        label = ent.label
+
+        if label == "DATE":
+            # Reject DATE spans that don't look like a date at all (e.g., CVV-Union).
+            if not re.search(r'today|\d{2}[-/]\d{2}[-/]\d{2,4}|\d{4}-\d{2}-\d{2}|\d', text, re.IGNORECASE):
+                continue
+
+        if label == "ACCOUNT":
+            if re.search(r'\bref\s+no\b', text, re.IGNORECASE):
+                # Replace noisy reference number with actual account/card pattern from SMS.
+                if account_from_text and not inserted_account:
+                    start = sms_text.lower().find(account_from_text.lower())
+                    end = start + len(account_from_text) if start >= 0 else ent.end
+                    cleaned.append(Entity(text=account_from_text, label="ACCOUNT", start=max(start, 0), end=end))
+                    inserted_account = True
+                continue
+            inserted_account = True
+
+        if label == "BALANCE" and clean_balance_text:
+            start = sms_text.lower().find(clean_balance_text.lower())
+            end = start + len(clean_balance_text) if start >= 0 else ent.end
+            cleaned.append(Entity(text=clean_balance_text, label="BALANCE", start=max(start, 0), end=end))
+            continue
+
+        cleaned.append(ent)
+
+    # If model missed account but we can derive one, add it.
+    if not any(e.label == "ACCOUNT" for e in cleaned) and account_from_text:
+        start = sms_text.lower().find(account_from_text.lower())
+        end = start + len(account_from_text) if start >= 0 else len(account_from_text)
+        cleaned.append(Entity(text=account_from_text, label="ACCOUNT", start=max(start, 0), end=end))
+
+    return cleaned
 
 
 def normalize_date(date_str: str) -> str:
@@ -572,7 +635,12 @@ async def parse_and_save_transaction(request: ParseAndSaveRequest):
         elif ent.label_ == "TXN_TYPE" and txn_type is None:
             txn_type = ent.text.lower()
         elif ent.label_ == "ACCOUNT" and account is None:
-            account = ent.text
+            candidate = ent.text.strip()
+            # Avoid capturing reference IDs (e.g., "ref no 123...") as account.
+            if re.search(r'\bref\s+no\b', candidate, re.IGNORECASE):
+                continue
+            if re.search(r'\ba/c\b|\bacct\b|\baccount\b|\bcard\b|[*Xx]\d{2,}|\d{4,}', candidate, re.IGNORECASE):
+                account = candidate
         elif ent.label_ == "DATE" and txn_date is None:
             txn_date = normalize_date(ent.text)
         elif ent.label_ == "BALANCE" and balance is None:
@@ -591,6 +659,20 @@ async def parse_and_save_transaction(request: ParseAndSaveRequest):
     if txn_date is None:
         import datetime
         txn_date = datetime.date.today().isoformat()
+
+    # Fallback regex extraction for account when NER misses or mislabels it.
+    if account is None:
+        account = extract_account_from_text(request.sms)
+
+    # Fallback regex extraction for balance when NER span is noisy.
+    if balance is None:
+        bal_match = re.search(
+            r'(?:Avl\s*(?:Bal|bal|balance|limit)?|Available\s+balance|bal(?:ance)?)\s*:?\s*(?:INR|Rs\.?|Rs:)?\s*(\d[\d,]*(?:\.\d+)?)',
+            request.sms,
+            re.IGNORECASE,
+        )
+        if bal_match:
+            balance = parse_amount(bal_match.group(1))
     
     # Use request merchant if provided, otherwise use extracted
     final_merchant = request.merchant if request.merchant else merchant
@@ -819,8 +901,7 @@ async def modify_transaction(
 # ============ Main Entry Point ============
 
 if __name__ == "__main__":
-    import subprocess
-    import sys
+    import uvicorn
     
     # Initialize database
     init_database()
@@ -829,21 +910,9 @@ if __name__ == "__main__":
     print("Starting Expense Tracker API Server")
     print("=" * 60)
 
-    # Start the API using the FastAPI CLI.
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "fastapi",
-            "run",
-            "api.py",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "8080",
-        ],
-        check=False,
-    )
+    # Use uvicorn directly so `python api.py` works without fastapi CLI extras.
+    # We pass import string `api:app` so all routes are loaded from module import.
+    uvicorn.run("api:app", host="0.0.0.0", port=8080, reload=False)
 
 
 # ============ LEDGER ENDPOINTS ============

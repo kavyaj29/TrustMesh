@@ -69,10 +69,18 @@ export default function AddSMSScreen({ navigation }) {
             return;
         }
 
-        // Validate that SMS looks like a bank message
-        const hasAmount = /(?:Rs\.?|INR|₹)\s*[\d,]+/.test(smsText);
-        if (!hasAmount) {
-            alert('This does not look like a valid bank SMS. Please paste a message containing an amount (e.g., Rs.5000 or INR 1000)');
+        // Validate that SMS looks like a bank message.
+        // Keep this permissive to support real SMS variants: rs/inr case, commas, decimals, and `Rs:` style.
+        const amountPattern = /(?:rs\.?|rs:|inr|₹)\s*[:.]?\s*\d[\d,]*(?:\.\d+)?/i;
+        const hasAmount = amountPattern.test(smsText);
+
+        // If preview already extracted key entities, allow save even when regex misses a rare format.
+        const extractedAmount = getEntityValue('AMOUNT');
+        const extractedTxnType = getEntityValue('TXN_TYPE');
+        const hasValidPreview = Boolean(extractedAmount && extractedTxnType);
+
+        if (!hasAmount && !hasValidPreview) {
+            alert('This SMS format could not be recognized. Tap Preview Extraction first, or paste a message containing amount and transaction type.');
             return;
         }
 

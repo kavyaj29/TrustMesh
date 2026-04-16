@@ -21,11 +21,84 @@ Entity Labels:
 """
 
 import csv
+import re
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
 # Path to the CSV file containing training data
 CSV_PATH = Path(__file__).parent / "training_data.csv"
+
+
+# CSV column mapping for each entity label
+ENTITY_COLUMNS = [
+    ("amount_start", "amount_end", "AMOUNT"),
+    ("txn_type_start", "txn_type_end", "TXN_TYPE"),
+    ("account_start", "account_end", "ACCOUNT"),
+    ("date_start", "date_end", "DATE"),
+    ("balance_start", "balance_end", "BALANCE"),
+    ("bank_start", "bank_end", "BANK"),
+    ("modality_start", "modality_end", "MODALITY"),
+    ("merchant_start", "merchant_end", "MERCHANT"),
+]
+
+
+def _looks_like_label(text: str, label: str) -> bool:
+    """Basic guardrails to reject clearly mismatched annotations."""
+    value = text.strip()
+    if not value:
+        return False
+
+    if label in {"AMOUNT", "BALANCE"}:
+        return bool(re.search(r"\d", value))
+    if label == "TXN_TYPE":
+        return bool(re.search(r"debit|credit|spent|withdraw|deposit|receive|transfer|charg", value, re.IGNORECASE))
+    if label == "DATE":
+        return bool(re.search(r"today|\d", value, re.IGNORECASE))
+    if label == "ACCOUNT":
+        return bool(re.search(r"a/c|acct|account|card|x\d|\*\d|XX\d|\d{4,}", value, re.IGNORECASE))
+
+    # BANK, MODALITY and MERCHANT can be free-form text.
+    return True
+
+
+def _extract_entity(
+    row: Dict[str, str],
+    text: str,
+    row_number: int,
+    start_col: str,
+    end_col: str,
+    label: str,
+) -> Tuple[int, int, str] | None:
+    """Return a validated entity tuple, otherwise None."""
+    start_raw = row.get(start_col, "")
+    end_raw = row.get(end_col, "")
+
+    if not start_raw or not end_raw:
+        return None
+
+    try:
+        start = int(start_raw)
+        end = int(end_raw)
+    except ValueError:
+        print(f"[WARN] Row {row_number}: Non-integer span for {label} ({start_raw}, {end_raw})")
+        return None
+
+    if not (0 <= start < end <= len(text)):
+        print(
+            f"[WARN] Row {row_number}: Out-of-range span for {label} "
+            f"({start}, {end}) in text length {len(text)}"
+        )
+        return None
+
+    entity_text = text[start:end]
+    if not _looks_like_label(entity_text, label):
+        print(
+            f"[WARN] Row {row_number}: Suspicious span for {label} -> "
+            f"'{entity_text}' (chars {start}-{end})"
+        )
+        return None
+
+    return (start, end, label)
 
 
 def load_training_data(csv_path: Path = CSV_PATH) -> List[Tuple[str, Dict[str, Any]]]:
@@ -39,80 +112,40 @@ def load_training_data(csv_path: Path = CSV_PATH) -> List[Tuple[str, Dict[str, A
         List of tuples (text, {"entities": [(start, end, label), ...]})
     """
     training_data = []
+    total_rows = 0
+    dropped_entities = 0
     
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         
         for row in reader:
+            total_rows += 1
             text = row['text']
             entities = []
-            
-            # Add AMOUNT entity if present
-            if row.get('amount_start') and row.get('amount_end'):
-                entities.append((
-                    int(row['amount_start']),
-                    int(row['amount_end']),
-                    "AMOUNT"
-                ))
-            
-            # Add TXN_TYPE entity if present
-            if row.get('txn_type_start') and row.get('txn_type_end'):
-                entities.append((
-                    int(row['txn_type_start']),
-                    int(row['txn_type_end']),
-                    "TXN_TYPE"
-                ))
-            
-            # Add ACCOUNT entity if present
-            if row.get('account_start') and row.get('account_end'):
-                entities.append((
-                    int(row['account_start']),
-                    int(row['account_end']),
-                    "ACCOUNT"
-                ))
-            
-            # Add DATE entity if present
-            if row.get('date_start') and row.get('date_end'):
-                entities.append((
-                    int(row['date_start']),
-                    int(row['date_end']),
-                    "DATE"
-                ))
-            
-            # Add BALANCE entity if present (optional)
-            if row.get('balance_start') and row.get('balance_end'):
-                entities.append((
-                    int(row['balance_start']),
-                    int(row['balance_end']),
-                    "BALANCE"
-                ))
-            
-            # Add BANK entity if present (optional)
-            if row.get('bank_start') and row.get('bank_end'):
-                entities.append((
-                    int(row['bank_start']),
-                    int(row['bank_end']),
-                    "BANK"
-                ))
-            
-            # Add MODALITY entity if present (POS/ATM/UPI/Online etc.)
-            if row.get('modality_start') and row.get('modality_end'):
-                entities.append((
-                    int(row['modality_start']),
-                    int(row['modality_end']),
-                    "MODALITY"
-                ))
-            
-            # Add MERCHANT entity if present (store/vendor name)
-            if row.get('merchant_start') and row.get('merchant_end'):
-                entities.append((
-                    int(row['merchant_start']),
-                    int(row['merchant_end']),
-                    "MERCHANT"
-                ))
+
+            for start_col, end_col, label in ENTITY_COLUMNS:
+                entity = _extract_entity(
+                    row=row,
+                    text=text,
+                    row_number=total_rows + 1,
+                    start_col=start_col,
+                    end_col=end_col,
+                    label=label,
+                )
+                if entity is None:
+                    if row.get(start_col) and row.get(end_col):
+                        dropped_entities += 1
+                    continue
+                entities.append(entity)
             
             training_data.append((text, {"entities": entities}))
-    
+
+    if dropped_entities:
+        print(
+            f"[INFO] Dropped {dropped_entities} invalid entity spans while loading "
+            f"{total_rows} rows from {csv_path.name}."
+        )
+
     return training_data
 
 
@@ -126,18 +159,30 @@ def validate_annotations():
     Useful for debugging annotation errors.
     """
     print("Validating training data annotations...\n")
-    
+
+    issue_count = 0
     for idx, (text, annot) in enumerate(TRAIN_DATA, 1):
         entities = annot["entities"]
         print(f"Example {idx} - Text: {text[:60]}...")
-        
+
         for start, end, label in entities:
+            if not (0 <= start < end <= len(text)):
+                issue_count += 1
+                print(f"  [INVALID] {label}: chars {start}-{end} out of range")
+                continue
             extracted = text[start:end]
-            print(f"  {label}: '{extracted}' (chars {start}-{end})")
-        
+            if not _looks_like_label(extracted, label):
+                issue_count += 1
+                print(f"  [SUSPICIOUS] {label}: '{extracted}' (chars {start}-{end})")
+            else:
+                print(f"  {label}: '{extracted}' (chars {start}-{end})")
+
         print("-" * 50)
-    
-    print(f"\n[OK] All annotations validated successfully!")
+
+    if issue_count:
+        print(f"\n[WARN] Validation finished with {issue_count} suspicious annotations.")
+    else:
+        print("\n[OK] All loaded annotations look valid.")
     print(f"\nTotal training examples: {len(TRAIN_DATA)}")
 
 

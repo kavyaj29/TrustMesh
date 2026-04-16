@@ -72,9 +72,23 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sms }),
       });
-      if (!response.ok) throw new Error('Failed to extract entities');
+
+      if (!response.ok) {
+        let errorMsg = 'Failed to extract entities';
+        try {
+          const error = await response.json();
+          errorMsg = error.detail?.message || error.detail?.error || error.detail || errorMsg;
+        } catch {
+          // Keep fallback message when error body is not JSON.
+        }
+        throw new Error(errorMsg);
+      }
+
       return await response.json();
     } catch (error) {
+      if (error?.message?.includes('Network request failed') || error?.name === 'TypeError') {
+        throw new Error('Cannot connect to backend API. Start server with: python api.py');
+      }
       throw error;
     }
   },
